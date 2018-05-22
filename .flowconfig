@@ -1,0 +1,14 @@
+[ignore]
+.*/bin/.*
+
+[include]
+./src
+
+[libs]
+flow-typed
+
+[lints]
+
+[options]
+
+[strict]

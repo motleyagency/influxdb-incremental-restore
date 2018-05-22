@@ -1,0 +1,64 @@
+{
+  "name": "influxdb-incremental-restore",
+  "version": "0.0.1",
+  "description": "InfluxDB incremental restore script for InfluxDB@^1.5.x ",
+  "main": "lib/index.js",
+  "bin": {
+    "influxdb-incremental-restore": "influxdb-incremental-restore.js"
+  },
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "build":
+      "yarn run babel src/index.js --out-file bin/influxdb-incremental-restore.js",
+    "prepublish": "yarn run build",
+    "test": "jest",
+    "precommit": "lint-staged"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/motleyagency/influxd-incremental-restore.git"
+  },
+  "keywords": ["influxdb", "influxd", "timeseries", "backups"],
+  "author": "Pete Nykänen <pete@motley.fi|pete.a.nykanen@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/motleyagency/influxdb-incremental-restore/issues"
+  },
+  "homepage":
+    "https://github.com/motleyagency/influxdb-incremental-restore#readme",
+  "dependencies": {
+    "babel-eslint": "^8.2.3",
+    "execa": "^0.10.0",
+    "fs-extra": "^6.0.1",
+    "lodash": "^4.17.10",
+    "meow": "^5.0.0",
+    "p-limit": "^1.2.0",
+    "p-queue": "^2.3.0",
+    "p-retry": "^2.0.0",
+    "tmp-promise": "^1.0.4"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-flow": "^6.23.0",
+    "eslint": "^4.19.1",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-config-airbnb-base": "^12.1.0",
+    "eslint-config-motley": "^9.0.0",
+    "eslint-config-prettier": "^2.9.0",
+    "eslint-plugin-import": "^2.12.0",
+    "eslint-plugin-jsx-a11y": "^6.0.3",
+    "eslint-plugin-react": "^7.8.2",
+    "flow-bin": "^0.72.0",
+    "husky": "^0.14.3",
+    "lint-staged": "^7.1.2",
+    "prettier": "^1.12.1"
+  },
+  "lint-staged": {
+    "*.{js,json,graphql,md,css,scss,less,ts}": [
+      "prettier --single-quote --trailing-comma all --write",
+      "git add"
+    ]
+  }
+}
