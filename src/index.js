@@ -20,11 +20,17 @@ type Groups = {
 
 type Flags = {
   host?: string,
+  port?: string,
   db: string,
   newdb?: string,
   rp?: string,
   newrp?: string,
   shard?: string,
+  password?: string,
+  username?: string,
+  ssl?: string,
+  unsafeSsl: string,
+  pps?: string,
   concurrency?: string,
 };
 
@@ -37,19 +43,31 @@ type Cli = {
 const cli: Cli = meow(
   `
 	Usage
-	  $ influxd-incremental-restore <influx-db-options> <path-to-backups>
+	  $ influx-incremental-restore <options> <path-to-backups>
 
 	Options
-	[ -host <host:port> ]: Host and port for InfluxDB OSS instance . Default value is '127.0.0.1:8088'. Required for remote connections. Example: -host 127.0.0.1:8088
-	[ -db <db_name> | -database <db_name> ]: Name of the database to be restored from the backup. Required.
+
+  influx-options:
+	[ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
+	[ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for remote connections. Example: -port 8088
+	[ -db <db_name>]: Name of the database to be restored from the backup. Required.
 	[ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
 	[ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
 	[ -newrp <newrp_name> ]: Name of the retention policy to be created on the target system. Requires that -rp is set. If not specified, then the -rp value is used.
 	[ -shard <shard_ID> ]: Shard ID of the shard to be restored. If specified, then -db and -rp are required.
-	[ -concurrency <integer> ]: Amount of concurrent requests to the database. Default is 1.
+  [ -password <password> ]: Password to connect to the server.
+  [ -username <username> ]: Username to connect to the server.
+  [ -ssl ]: Use https for requests.
+  [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
+  [ -pps ] How many points per second the import will allow.  By default it is zero and will not throttle importing.
+
+  general options:
+	[ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
+  [ --version ]: Display version and exit
+  [ --help ]: Display this help
 
 	Examples
-	  $ influxd-incremental-restore -db old-database ./backups
+	  $ influx-incremental-restore -db old-database ./backups
 `,
   {
     host: {
@@ -69,6 +87,21 @@ const cli: Cli = meow(
       type: 'string',
     },
     shard: {
+      type: 'string',
+    },
+    password: {
+      type: 'string',
+    },
+    username: {
+      type: 'string',
+    },
+    ssl: {
+      type: 'boolean',
+    },
+    unsafeSsl: {
+      type: 'boolean',
+    },
+    pps: {
       type: 'string',
     },
     concurrency: {
@@ -101,6 +134,31 @@ if (!flags.db) {
   process.exit(1);
 }
 
+const createHostPort = ({ isCombined }): string[] => {
+  const { host = '127.0.0.1', port = '8088' } = flags;
+
+  if (isCombined) {
+    return ['-host', `${host}:${port}`];
+  }
+
+  return ['-host', host, `-port`, port];
+};
+
+const createConfigFromFlags = (values: string[]): string[] =>
+  flatten(
+    Object.entries(pick(flags, values)).reduce(
+      (acc: Array<string[]>, [key, val]): Array<Array<string>> => {
+        if (typeof val === 'boolean' && val === true) {
+          acc.push([`-${key}`]);
+        } else if (typeof val === 'string') {
+          acc.push([`-${key}`, val]);
+        }
+        return acc;
+      },
+      [],
+    ),
+  );
+
 const validateGroups = (groups: Groups) => {
   Object.entries(groups).forEach(([key, entry]) => {
     // $FlowFixMe
@@ -131,10 +189,14 @@ const runMergeScript = async (
 
   const executeCommand = (command: string) =>
     execa('influx', [
-      '-host',
-      'localhost',
-      '-port',
-      '8086',
+      ...createHostPort({ isCombined: true }),
+      ...createConfigFromFlags([
+        'password',
+        'username',
+        'ssl',
+        'unsafeSsl',
+        'pps',
+      ]),
       '-execute',
       command,
     ]);
@@ -162,17 +224,6 @@ const runMergeScript = async (
   );
 };
 
-const createConfigFromFlags = (values: string[]): mixed[] =>
-  flatten(
-    Object.entries(pick(flags, values)).reduce(
-      (acc: Array<mixed[]>, [key, val]): Array<Array<mixed>> => {
-        acc.push([`-${key}`, val]);
-        return acc;
-      },
-      [],
-    ),
-  );
-
 const restoreGroups = async (groups: Groups): Promise<void> => {
   const tmpDir = await tmp.dir({ unsafeCleanup: true });
   const limit = pLimit(CONCURRENCY);
@@ -197,14 +248,8 @@ const restoreGroups = async (groups: Groups): Promise<void> => {
           execa('influxd', [
             'restore',
             '-portable',
-            ...createConfigFromFlags([
-              'host',
-              'port',
-              'db',
-              'rp',
-              'newrp',
-              'shard',
-            ]),
+            ...createHostPort({ isCombined: true }),
+            ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
             '-newdb',
             `${flags.db}_${key}`,
             tmpPath,

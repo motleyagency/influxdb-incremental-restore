@@ -1,5 +1,5 @@
 {
-  "name": "influxdb-incremental-restore",
+  "name": "@motleyagency/influxdb-incremental-restore",
   "version": "0.0.1",
   "description": "InfluxDB incremental restore script for InfluxDB@^1.5.x ",
   "main": "lib/index.js",
@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build":
-      "yarn run babel src/index.js --out-file bin/influxdb-incremental-restore.js",
+      "babel src/index.js --out-file bin/influxdb-incremental-restore.js",
     "prepublish": "yarn run build",
     "test": "jest",
     "precommit": "lint-staged"
@@ -37,6 +37,7 @@
     "p-limit": "^1.2.0",
     "p-queue": "^2.3.0",
     "p-retry": "^2.0.0",
+    "parcel": "^1.8.1",
     "tmp-promise": "^1.0.4"
   },
   "devDependencies": {
