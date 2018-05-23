@@ -42,32 +42,32 @@ type Cli = {
 
 const cli: Cli = meow(
   `
-	Usage
-	  $ influx-incremental-restore <options> <path-to-backups>
+  Usage
+  $ influx-incremental-restore <options> <path-to-backups>
 
-	Options
+  Options
+    [ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
+    [ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for remote connections. Example: -port 8088
+    [ -db <db_name>]: Name of the database to be restored from the backup. Required.
+    [ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
+    [ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
+    [ -newrp <newrp_name> ]: Name of the retention policy to be created on the target system. Requires that -rp is set. If not specified, then the -rp value is used.
+    [ -shard <shard_ID> ]: Shard ID of the shard to be restored. If specified, then -db and -rp are required.
+    [ -password <password> ]: Password to connect to the server.
+    [ -username <username> ]: Username to connect to the server.
+    [ -ssl ]: Use https for requests.
+    [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
+    [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
+    [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
+    [ --version ]: Display version and exit
+    [ --help ]: Display this help
 
-  influx-options:
-	[ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
-	[ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for remote connections. Example: -port 8088
-	[ -db <db_name>]: Name of the database to be restored from the backup. Required.
-	[ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
-	[ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
-	[ -newrp <newrp_name> ]: Name of the retention policy to be created on the target system. Requires that -rp is set. If not specified, then the -rp value is used.
-	[ -shard <shard_ID> ]: Shard ID of the shard to be restored. If specified, then -db and -rp are required.
-  [ -password <password> ]: Password to connect to the server.
-  [ -username <username> ]: Username to connect to the server.
-  [ -ssl ]: Use https for requests.
-  [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
-  [ -pps ] How many points per second the import will allow.  By default it is zero and will not throttle importing.
-
-  general options:
-	[ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
-  [ --version ]: Display version and exit
-  [ --help ]: Display this help
-
-	Examples
-	  $ influx-incremental-restore -db old-database ./backups
+  Examples
+    $ influx-incremental-restore -db old-database ./backups
+    $ influxdb-incremental-restore -db old-database ./backups # restores old-database
+    $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
+    $ influxdb-incremental-restore --version
+    $ influxdb-incremental-restore --help
 `,
   {
     host: {
