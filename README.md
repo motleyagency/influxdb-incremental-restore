@@ -1,4 +1,6 @@
-# InfluxDB incremental restore (`influxdb-incremental-restore`)
+# InfluxDB incremental restore
+
+## (`influxdb-incremental-restore`)
 
 > InfluxDB incremental restore script with NodeJS
 
