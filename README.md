@@ -57,7 +57,7 @@ yarn global add @motleyagency/influxdb-incremental-restore
 CLI for incrementally restoring incremental InfluxDB backups
 
 Usage
-  $ influx-incremental-restore -db <db_name> <options> <path-to-backups>
+  $ influxdb-incremental-restore -db <db_name> <options> <path-to-backups>
 
 Options
 
@@ -90,6 +90,7 @@ Examples
 
 ### Versions
 
+* `0.0.2`: Fix bin/-link.
 * `0.0.1`: Initial release catered for our needs. Seems to work but YMMV.
 
 ### Contributions
