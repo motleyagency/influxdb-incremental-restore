@@ -21,7 +21,8 @@ const cli = meow(
 
   Options
     [ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
-    [ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for remote connections. Example: -port 8088
+    [ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for restore/backup connections. Example: -port 8088
+    [ -portHttp <port> ]: Host and port for InfluxDB OSS instance. Default value is '8086'. Required for Api connections. Example: -port 8086
     [ -db <db_name>]: Name of the database to be restored from the backup. Required.
     [ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
     [ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
@@ -108,14 +109,14 @@ if (!flags.db) {
   process.exit(1);
 }
 
-const createHostPort = ({ isCombined }) => {
-  const { host = '127.0.0.1', port = '8088' } = flags;
-
+const createHostPort = ({ isCombined, restore = false }) => {
+  const { host = '127.0.0.1', port = '8088', portHttp = '8086' } = flags;
+  const p = restore ? port : portHttp;
   if (isCombined) {
-    return ['-host', `${host}:${port}`];
+    return ['-host', `${host}:${p}`];
   }
 
-  return ['-host', host, `-port`, port];
+  return ['-host', host, `-port`, p];
 };
 
 const createConfigFromFlags = values =>
@@ -158,7 +159,7 @@ const runMergeScript = async groups => {
 
   const executeCommand = command =>
     execa('influx', [
-      ...createHostPort({ isCombined: true }),
+      ...createHostPort({ isCombined: false }),
       ...createConfigFromFlags([
         'password',
         'username',
@@ -217,7 +218,7 @@ const restoreGroups = async groups => {
           execa('influxd', [
             'restore',
             '-portable',
-            ...createHostPort({ isCombined: true }),
+            ...createHostPort({ isCombined: true, restore: true }),
             ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
             '-newdb',
             `${flags.db}_${key}`,
