@@ -62,7 +62,8 @@ Usage
 Options
 
 [ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
-[ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for remote connections. Example: -port 8088
+[ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for restore/backup connections. Example: -port 8088
+[ -portHttp <port> ]: Host and port for InfluxDB OSS instance. Default value is '8086'. Required for Api connections. Example: -portHttp 8086
 [ -db <db_name>]: Name of the database to be restored from the backup. Required.
 [ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
 [ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
@@ -90,6 +91,7 @@ Examples
 
 ### Versions
 
+* `0.0.3`: Separate API and RPC port configurations
 * `0.0.2`: Fix bin/-link.
 * `0.0.1`: Initial release catered for our needs. Seems to work but YMMV.
 
