@@ -48,6 +48,12 @@ const cli = meow(
     host: {
       type: 'string',
     },
+    port: {
+      type: 'string',
+    },
+    httpPort: {
+      type: 'string',
+    },
     db: {
       type: 'string',
       alias: 'database',
@@ -109,9 +115,10 @@ if (!flags.db) {
   process.exit(1);
 }
 
-const createHostPort = ({ isCombined, restore = false }) => {
+const createHostPort = ({ isCombined, restore }) => {
   const { host = '127.0.0.1', port = '8088', portHttp = '8086' } = flags;
   const p = restore ? port : portHttp;
+
   if (isCombined) {
     return ['-host', `${host}:${p}`];
   }
@@ -156,10 +163,11 @@ const validateGroups = groups => {
 const runMergeScript = async groups => {
   // $FlowFixMe
   const limit = pLimit(CONCURRENCY);
+  const config = { isCombined: false, restore: false };
 
   const executeCommand = command =>
     execa('influx', [
-      ...createHostPort({ isCombined: false }),
+      ...createHostPort(config),
       ...createConfigFromFlags([
         'password',
         'username',
