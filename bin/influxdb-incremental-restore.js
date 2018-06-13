@@ -17,7 +17,7 @@ const readdir = promisify(fs.readdir);
 const cli = meow(
   `
   Usage
-  $ influx-incremental-restore <options> <path-to-backups>
+  $ influxdb-incremental-restore <options> <path-to-backups>
 
   Options
     [ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
@@ -38,7 +38,7 @@ const cli = meow(
     [ --help ]: Display this help
 
   Examples
-    $ influx-incremental-restore -db old-database ./backups
+    $ influxdb-incremental-restore -db old-database ./backups
     $ influxdb-incremental-restore -db old-database ./backups # restores old-database
     $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
     $ influxdb-incremental-restore --version
@@ -51,7 +51,7 @@ const cli = meow(
     port: {
       type: 'string',
     },
-    httpPort: {
+    portHttp: {
       type: 'string',
     },
     db: {

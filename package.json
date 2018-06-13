@@ -1,6 +1,6 @@
 {
   "name": "@motleyagency/influxdb-incremental-restore",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "InfluxDB incremental restore script for InfluxDB@^1.5.x ",
   "main": "bin/influxdb-incremental-restore",
   "bin": {
