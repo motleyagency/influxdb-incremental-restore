@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/motleyagency/influxd-incremental-restore.git"
+    "url": "git+https://github.com/motleyagency/influxdb-incremental-restore.git"
   },
   "keywords": ["influxdb", "influxd", "timeseries", "backups"],
   "author": "Pete Nykänen <pete@motley.fi|pete.a.nykanen@gmail.com>",
