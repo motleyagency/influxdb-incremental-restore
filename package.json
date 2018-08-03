@@ -1,6 +1,6 @@
 {
   "name": "@motleyagency/influxdb-incremental-restore",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "InfluxDB incremental restore script for InfluxDB@^1.5.x ",
   "main": "bin/influxdb-incremental-restore",
   "bin": {
@@ -18,7 +18,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/motleyagency/influxdb-incremental-restore.git"
+    "url":
+      "git+https://github.com/motleyagency/influxdb-incremental-restore.git"
   },
   "keywords": ["influxdb", "influxd", "timeseries", "backups"],
   "author": "Pete Nykänen <pete@motley.fi|pete.a.nykanen@gmail.com>",

@@ -188,16 +188,32 @@ const runMergeScript = async groups => {
       const tempDatabase = `${flags.db}_${key}`;
       const targetDatabase = `${flags.newdb || flags.db}`;
 
+      console.info(`  INFO: Merging ${tempDatabase} to ${targetDatabase}...`);
+
       const run = async () => {
         await executeCommand(
           `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM ${tempDatabase}../.*/ GROUP BY *;`,
         );
         await executeCommand(`DROP DATABASE ${tempDatabase}`);
 
+        console.info(`  INFO: Merged ${tempDatabase} to ${targetDatabase}!`);
         return Promise.resolve();
       };
 
-      return limit(() => pRetry(run, { retries: 5 }));
+      return limit(() =>
+        pRetry(run, {
+          onFailedAttempt: error => {
+            console.log(
+              `Attempt ${
+                error.attemptNumber
+              } for ${tempDatabase} to ${targetDatabase} failed. There are ${
+                error.attemptsLeft
+              } attempts left.`,
+            );
+          },
+          retries: 5,
+        }),
+      );
     }),
   );
 };
@@ -222,8 +238,9 @@ const restoreGroups = async groups => {
           ),
         );
 
-        return limit(() =>
-          execa('influxd', [
+        return limit(() => {
+          console.info(`  INFO: Restoring ${flags.db}_${key}...`);
+          return execa('influxd', [
             'restore',
             '-portable',
             ...createHostPort({ isCombined: true, restore: true }),
@@ -234,8 +251,9 @@ const restoreGroups = async groups => {
           ]).then(result => {
             console.log(result.stdout);
             console.log(result.stderr);
-          }),
-        );
+            console.info(`  Restored ${flags.db}_${key}!`);
+          });
+        });
       }),
     );
   } catch (err) {
@@ -253,7 +271,7 @@ const restoreGroups = async groups => {
     const groups = groupBy(names, i => i.split('.')[0]);
 
     if (groups.length === 0) {
-      console.info('INFO:  Nothing to restore, exiting...');
+      console.info('  INFO:  Nothing to restore, exiting...');
       process.exit(0);
     }
 

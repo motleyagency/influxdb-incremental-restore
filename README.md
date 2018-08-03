@@ -89,6 +89,7 @@ Examples
 
 ### Versions
 
+* `0.0.5`: Increased logging for better UX
 * `0.0.4`: Fix `portHttp` flag, few typo fixes
 * `0.0.3`: Separate API and RPC port configurations
 * `0.0.2`: Fix bin/-link.
