@@ -14,6 +14,7 @@ incremental backups in InfluxDB (1.5.x). This script does just that for InfluxDB
 * `influxd` CLI tool
 * InfluxDB `-portable` backups (`meta`, `manifest` and `sX.tar.gz` (shards/data)) in a single level deep folder
 * A running InfluxDB installation that does not contain a database with the given name.
+* (OPTIONAL) Disable [`query timeout`](https://docs.influxdata.com/influxdb/v1.6/troubleshooting/query_management/#query-timeout)s if any.
 
 #### Folder structure
 
