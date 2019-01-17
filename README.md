@@ -73,6 +73,8 @@ Options
 [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
 [ -pps ] How many points per second the import will allow.  By default it is zero and will not throttle importing.
 [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
+[ -measurements <meas1;meas2> ]: measurement list (separated by semicolumn)
+[ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolumn)
 
 General commands:
 [ --version ]: Display version and exit
@@ -81,6 +83,8 @@ General commands:
 Examples
   $ influxdb-incremental-restore -db old-database ./backups # restores old-database
   $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
+  $ influxdb-incremental-restore -db old-database -measurements outdoor_temperatures;indoor_temperatures
+  $ influxdb-incremental-restore -db old-database -measurements 'temperature::float;temperature::integer,humidity::integer'
   $ influxdb-incremental-restore --version
   $ influxdb-incremental-restore --help
 ```

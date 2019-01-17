@@ -34,6 +34,8 @@ const cli = meow(
     [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
     [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
     [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
+    [ -measurements <meas1;meas2> ]: measurement list (separated by semicolumn)
+    [ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolumn) 
     [ --version ]: Display version and exit
     [ --help ]: Display this help
 
@@ -41,6 +43,8 @@ const cli = meow(
     $ influxdb-incremental-restore -db old-database ./backups
     $ influxdb-incremental-restore -db old-database ./backups # restores old-database
     $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
+    $ influxdb-incremental-restore -db old-database -measurements outdoor_temperatures;indoor_temperatures
+    $ influxdb-incremental-restore -db old-database -measurements 'temperature::float;temperature::integer,humidity::integer'
     $ influxdb-incremental-restore --version
     $ influxdb-incremental-restore --help
 `,
@@ -88,6 +92,12 @@ const cli = meow(
     concurrency: {
       type: 'string',
     },
+    measurements: {
+      type: 'string',
+    },
+    fields: {
+      type: 'string',
+    },
     description: 'CLI for incrementally restoring incremental InfluxDB backups',
     argv: process.argv
       .slice(2)
@@ -99,11 +109,21 @@ const {
   input: [dumpFolder],
   flags,
 } = cli;
-
 const CONCURRENCY = parseInt(flags.concurrency, 10) || 1;
 
 if (!dumpFolder || dumpFolder.length === 0) {
   console.error('  ERROR: You must provide path to backup folder');
+  console.log(cli.help);
+  process.exit(1);
+}
+
+const measurements =
+  (flags.measurements && flags.measurements.split(';')) || [];
+const fields = (flags.fields && flags.fields.split(';')) || [];
+if (measurements.length !== fields.length && fields.length > 0) {
+  console.error(
+    '  ERROR: Measurement and field lists need to be equal size or fields should be empty',
+  );
   console.log(cli.help);
   process.exit(1);
 }
@@ -159,25 +179,25 @@ const validateGroups = groups => {
     }
   });
 };
+const config = { isCombined: false, restore: false };
+
+const executeCommand = command =>
+  execa('influx', [
+    ...createHostPort(config),
+    ...createConfigFromFlags([
+      'password',
+      'username',
+      'ssl',
+      'unsafeSsl',
+      'pps',
+    ]),
+    '-execute',
+    command,
+  ]);
 
 const runMergeScript = async groups => {
   // $FlowFixMe
   const limit = pLimit(CONCURRENCY);
-  const config = { isCombined: false, restore: false };
-
-  const executeCommand = command =>
-    execa('influx', [
-      ...createHostPort(config),
-      ...createConfigFromFlags([
-        'password',
-        'username',
-        'ssl',
-        'unsafeSsl',
-        'pps',
-      ]),
-      '-execute',
-      command,
-    ]);
 
   const keys = Object.keys(groups);
 
@@ -188,32 +208,50 @@ const runMergeScript = async groups => {
       const tempDatabase = `${flags.db}_${key}`;
       const targetDatabase = `${flags.newdb || flags.db}`;
 
-      console.info(`  INFO: Merging ${tempDatabase} to ${targetDatabase}...`);
-
-      const run = async () => {
-        await executeCommand(
-          `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM ${tempDatabase}../.*/ GROUP BY *;`,
+      const measurements =
+        (flags.measurements && flags.measurements.split(';')) || [];
+      const fields = (flags.fields && flags.fields.split(';')) || [];
+      if (measurements.length !== fields.length && fields.length > 0) {
+        throw new Error(
+          'measurement and field list need to be equal size or fields should be empty',
         );
-        await executeCommand(`DROP DATABASE ${tempDatabase}`);
+      }
+      if (!measurements.length) {
+        measurements.push(null);
+        fields.push(null);
+      }
 
-        console.info(`  INFO: Merged ${tempDatabase} to ${targetDatabase}!`);
-        return Promise.resolve();
-      };
-
-      return limit(() =>
-        pRetry(run, {
-          onFailedAttempt: error => {
-            console.log(
-              `Attempt ${
-                error.attemptNumber
-              } for ${tempDatabase} to ${targetDatabase} failed. There are ${
-                error.attemptsLeft
-              } attempts left.`,
+      return Promise.all(
+        measurements.map((measurement, i) => {
+          const run = async () => {
+            await executeCommand(
+              `SELECT ${fields[i]} INTO ${targetDatabase}..${measurement ||
+                `:MEASUREMENT`} FROM  ${tempDatabase}..${measurement ||
+                `/.*/`} GROUP BY *`,
             );
-          },
-          retries: 5,
+
+            console.info(
+              `  INFO: Merged ${measurement ||
+                `*`} ON ${tempDatabase} to ${targetDatabase}!`,
+            );
+            return Promise.resolve();
+          };
+          return limit(() =>
+            pRetry(run, {
+              onFailedAttempt: error => {
+                console.log(
+                  `Attempt ${
+                    error.attemptNumber
+                  } for ${tempDatabase} to ${targetDatabase} failed. There are ${
+                    error.attemptsLeft
+                  } attempts left.`,
+                );
+              },
+              retries: 2,
+            }),
+          );
         }),
-      );
+      ).then(() => executeCommand(`DROP DATABASE ${tempDatabase}`));
     }),
   );
 };
@@ -240,19 +278,29 @@ const restoreGroups = async groups => {
 
         return limit(() => {
           console.info(`  INFO: Restoring ${flags.db}_${key}...`);
-          return execa('influxd', [
-            'restore',
-            '-portable',
-            ...createHostPort({ isCombined: true, restore: true }),
-            ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
-            '-newdb',
-            `${flags.db}_${key}`,
-            tmpPath,
-          ]).then(result => {
-            console.log(result.stdout);
-            console.log(result.stderr);
-            console.info(`  Restored ${flags.db}_${key}!`);
-          });
+          return executeCommand(`SHOW MEASUREMENTS ON ${flags.db}_${key}`).then(
+            ({ stdout, failed }) => {
+              // no results found or failed
+
+              if (!stdout || failed) {
+                return execa('influxd', [
+                  'restore',
+                  '-portable',
+                  ...createHostPort({ isCombined: true, restore: true }),
+                  ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
+                  '-newdb',
+                  `${flags.db}_${key}`,
+                  tmpPath,
+                ]).then(result => {
+                  console.log(result.stdout);
+                  console.log(result.stderr);
+                  console.info(`  Restored ${flags.db}_${key}!`);
+                });
+              }
+              console.log(`Skipping ${flags.db}_${key} as it already exists`);
+              return Promise.resolve();
+            },
+          );
         });
       }),
     );
