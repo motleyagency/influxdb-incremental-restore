@@ -247,7 +247,7 @@ const runMergeScript = async groups => {
                   } attempts left.`,
                 );
               },
-              retries: 2,
+              retries: 5,
             }),
           );
         }),

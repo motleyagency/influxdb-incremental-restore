@@ -284,7 +284,7 @@ const runMergeScript = async (
                   } attempts left.`,
                 );
               },
-              retries: 2,
+              retries: 5,
             }),
           );
         }),
