@@ -34,8 +34,8 @@ const cli = meow(
     [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
     [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
     [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
-    [ -measurements <meas1;meas2> ]: measurement list (separated by semicolumn)
-    [ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolumn) 
+    [ -measurements <meas1;meas2> ]: measurement list (separated by semicolun)
+    [ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolun) 
     [ --version ]: Display version and exit
     [ --help ]: Display this help
 
