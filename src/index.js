@@ -335,7 +335,6 @@ const restoreGroups = async (groups: Groups): Promise<void> => {
                 });
               }
               console.log(`Skipping ${flags.db}_${key} as it already exists`);
-              return Promise.resolve();
             },
           );
         });
