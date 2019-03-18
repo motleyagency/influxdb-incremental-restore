@@ -33,6 +33,7 @@ type Flags = {
   unsafeSsl: string,
   pps?: string,
   concurrency?: string,
+  useTargetMeasurements?: boolean,
 };
 
 type Cli = {
@@ -44,6 +45,10 @@ type Cli = {
 type HostPortConfig = {
   isCombined: boolean,
   restore: boolean,
+};
+
+type InfluxDataResult = {
+  stdout: string,
 };
 
 const cli: Cli = meow(
@@ -202,7 +207,10 @@ const validateGroups = (groups: Groups) => {
 };
 const config: HostPortConfig = { isCombined: false, restore: false };
 
-const executeCommand = (command: string, format: string) =>
+const executeCommand = (
+  command: string,
+  format: string = 'column',
+): Promise<InfluxDataResult> =>
   execa('influx', [
     ...createHostPort(config),
     ...createConfigFromFlags([
@@ -212,7 +220,7 @@ const executeCommand = (command: string, format: string) =>
       'unsafeSsl',
       'pps',
     ]),
-    `-format=${format || 'column'}`,
+    `-format=${format}`,
     '-execute',
     command,
   ]);
@@ -225,36 +233,34 @@ const parseResults = res =>
     return acc;
   }, {});
 
-const parseTags = (tags: string[]): string[] =>
-  tags.map(item => `${item.key}::tag`);
-const parseFields = (fields: string[], tags: string[]): string[] =>
+const parseTags = (tags): Array<string> => tags.map(item => `${item.key}::tag`);
+
+const parseFields = (fields: Array<Object>, tags): string[] =>
   fields
     .filter(field => !tags.find(tag => tag.key === field.key))
     .map(field => `${field.key}::${field.value}`);
 
-const runMergeScript = async (
-  groups: Groups,
-): Promise<Array<Promise<void>>> => {
+const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
   // $FlowFixMe
   const limit = pLimit(CONCURRENCY);
 
   const keys = Object.keys(groups);
 
   await executeCommand(`CREATE DATABASE ${flags.newdb || flags.db}`);
-
+  const defaultResult: InfluxDataResult = { stdout: '*' };
   const targetDatabase = `${flags.newdb || flags.db}`;
   const measurementsFields = useTargetMeasurements
     ? [
         executeCommand(`SHOW field keys ON ${targetDatabase}`, 'json'),
         executeCommand(`SHOW tag keys ON ${targetDatabase}`, 'json'),
       ]
-    : [Promise.resolve('*')];
+    : [Promise.resolve(defaultResult)];
 
   return Promise.all(measurementsFields).then(([fields, tags]) => {
-    const measurements: string[] = useTargetMeasurements
+    const measurements = useTargetMeasurements
       ? parseResults(JSON.parse(fields.stdout))
       : { '*': [] };
-    const tagKeys: string[] = useTargetMeasurements
+    const tagKeys = useTargetMeasurements
       ? parseResults(JSON.parse(tags.stdout))
       : { '*': [] };
 
@@ -268,10 +274,14 @@ const runMergeScript = async (
                 const tag = parseTags(tagKeys[measurement]);
                 const fieldKeys = parseFields(values, tagKeys[measurement]);
                 console.log(
-                  `Using target measurements:  ${tag.concat()},${fieldKeys.concat()}`,
+                  `Using target measurements:  ${tag.join(
+                    ',',
+                  )},${fieldKeys.join(',')}`,
                 );
                 await executeCommand(
-                  `SELECT ${tag.concat()},${fieldKeys.concat()} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
+                  `SELECT ${tag.join(',')},${fieldKeys.join(
+                    ',',
+                  )} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
                 );
               } else {
                 console.log('Using wild card for copying measurements');
@@ -308,7 +318,7 @@ const runMergeScript = async (
   });
 };
 
-const restoreGroups = async (groups: Groups): Promise<void> => {
+const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
   const tmpDir = await tmp.dir({ unsafeCleanup: true });
   const limit = pLimit(CONCURRENCY);
 
@@ -330,28 +340,29 @@ const restoreGroups = async (groups: Groups): Promise<void> => {
 
         return limit(() => {
           console.info(`  INFO: Restoring ${flags.db}_${key}...`);
-          return executeCommand(`SHOW MEASUREMENTS ON ${flags.db}_${key}`).then(
-            ({ stdout, failed }) => {
-              // no results found or failed
+          return executeCommand(
+            `SHOW MEASUREMENTS ON ${flags.db}_${key}`,
+            'column',
+          ).then(({ stdout, failed }) => {
+            // no results found or failed
 
-              if (!stdout || failed) {
-                return execa('influxd', [
-                  'restore',
-                  '-portable',
-                  ...createHostPort({ isCombined: true, restore: true }),
-                  ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
-                  '-newdb',
-                  `${flags.db}_${key}`,
-                  tmpPath,
-                ]).then(result => {
-                  console.log(result.stdout);
-                  console.log(result.stderr);
-                  console.info(`  Restored ${flags.db}_${key}!`);
-                });
-              }
-              console.log(`Skipping ${flags.db}_${key} as it already exists`);
-            },
-          );
+            if (!stdout || failed) {
+              return execa('influxd', [
+                'restore',
+                '-portable',
+                ...createHostPort({ isCombined: true, restore: true }),
+                ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
+                '-newdb',
+                `${flags.db}_${key}`,
+                tmpPath,
+              ]).then(result => {
+                console.log(result.stdout);
+                console.log(result.stderr);
+                console.info(`  Restored ${flags.db}_${key}!`);
+              });
+            }
+            console.log(`Skipping ${flags.db}_${key} as it already exists`);
+          });
         });
       }),
     );

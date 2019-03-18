@@ -167,7 +167,7 @@ const validateGroups = groups => {
 };
 const config = { isCombined: false, restore: false };
 
-const executeCommand = (command, format) =>
+const executeCommand = (command, format = 'column') =>
   execa('influx', [
     ...createHostPort(config),
     ...createConfigFromFlags([
@@ -177,7 +177,7 @@ const executeCommand = (command, format) =>
       'unsafeSsl',
       'pps',
     ]),
-    `-format=${format || 'column'}`,
+    `-format=${format}`,
     '-execute',
     command,
   ]);
@@ -191,6 +191,7 @@ const parseResults = res =>
   }, {});
 
 const parseTags = tags => tags.map(item => `${item.key}::tag`);
+
 const parseFields = (fields, tags) =>
   fields
     .filter(field => !tags.find(tag => tag.key === field.key))
@@ -203,14 +204,14 @@ const runMergeScript = async groups => {
   const keys = Object.keys(groups);
 
   await executeCommand(`CREATE DATABASE ${flags.newdb || flags.db}`);
-
+  const defaultResult = { stdout: '*' };
   const targetDatabase = `${flags.newdb || flags.db}`;
   const measurementsFields = useTargetMeasurements
     ? [
         executeCommand(`SHOW field keys ON ${targetDatabase}`, 'json'),
         executeCommand(`SHOW tag keys ON ${targetDatabase}`, 'json'),
       ]
-    : [Promise.resolve('*')];
+    : [Promise.resolve(defaultResult)];
 
   return Promise.all(measurementsFields).then(([fields, tags]) => {
     const measurements = useTargetMeasurements
@@ -230,10 +231,14 @@ const runMergeScript = async groups => {
                 const tag = parseTags(tagKeys[measurement]);
                 const fieldKeys = parseFields(values, tagKeys[measurement]);
                 console.log(
-                  `Using target measurements:  ${tag.concat()},${fieldKeys.concat()}`,
+                  `Using target measurements:  ${tag.join(
+                    ',',
+                  )},${fieldKeys.join(',')}`,
                 );
                 await executeCommand(
-                  `SELECT ${tag.concat()},${fieldKeys.concat()} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
+                  `SELECT ${tag.join(',')},${fieldKeys.join(
+                    ',',
+                  )} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
                 );
               } else {
                 console.log('Using wild card for copying measurements');
@@ -292,28 +297,29 @@ const restoreGroups = async groups => {
 
         return limit(() => {
           console.info(`  INFO: Restoring ${flags.db}_${key}...`);
-          return executeCommand(`SHOW MEASUREMENTS ON ${flags.db}_${key}`).then(
-            ({ stdout, failed }) => {
-              // no results found or failed
+          return executeCommand(
+            `SHOW MEASUREMENTS ON ${flags.db}_${key}`,
+            'column',
+          ).then(({ stdout, failed }) => {
+            // no results found or failed
 
-              if (!stdout || failed) {
-                return execa('influxd', [
-                  'restore',
-                  '-portable',
-                  ...createHostPort({ isCombined: true, restore: true }),
-                  ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
-                  '-newdb',
-                  `${flags.db}_${key}`,
-                  tmpPath,
-                ]).then(result => {
-                  console.log(result.stdout);
-                  console.log(result.stderr);
-                  console.info(`  Restored ${flags.db}_${key}!`);
-                });
-              }
-              console.log(`Skipping ${flags.db}_${key} as it already exists`);
-            },
-          );
+            if (!stdout || failed) {
+              return execa('influxd', [
+                'restore',
+                '-portable',
+                ...createHostPort({ isCombined: true, restore: true }),
+                ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
+                '-newdb',
+                `${flags.db}_${key}`,
+                tmpPath,
+              ]).then(result => {
+                console.log(result.stdout);
+                console.log(result.stderr);
+                console.info(`  Restored ${flags.db}_${key}!`);
+              });
+            }
+            console.log(`Skipping ${flags.db}_${key} as it already exists`);
+          });
         });
       }),
     );
