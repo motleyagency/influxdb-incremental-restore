@@ -65,9 +65,8 @@ const cli: Cli = meow(
     [ -ssl ]: Use https for requests.
     [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
     [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
+    [ -useTargetMeasurements] Use measrements from target database, use if you get error like '... input field "<field>" on measurement "<measurement>" is type float, already exists as type integer... '
     [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
-    [ -measurements <meas1;meas2> ]: measurement list (separated by semicolun)
-    [ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolun) 
     [ --version ]: Display version and exit
     [ --help ]: Display this help
 
@@ -75,8 +74,7 @@ const cli: Cli = meow(
     $ influxdb-incremental-restore -db old-database ./backups
     $ influxdb-incremental-restore -db old-database ./backups # restores old-database
     $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
-    $ influxdb-incremental-restore -db old-database -measurements outdoor_temperatures;indoor_temperatures
-    $ influxdb-incremental-restore -db old-database -measurements 'temperature::float;temperature::integer,humidity::integer'
+    $ influxdb-incremental-restore -db old-database -useTargetMeasurements
     $ influxdb-incremental-restore --version
     $ influxdb-incremental-restore --help
 `,
@@ -124,11 +122,8 @@ const cli: Cli = meow(
     concurrency: {
       type: 'string',
     },
-    measurements: {
-      type: 'string',
-    },
-    fields: {
-      type: 'string',
+    useTargetMeasurements: {
+      type: 'boolean',
     },
     description: 'CLI for incrementally restoring incremental InfluxDB backups',
     argv: process.argv
@@ -149,16 +144,7 @@ if (!dumpFolder || dumpFolder.length === 0) {
   process.exit(1);
 }
 
-const measurements =
-  (flags.measurements && flags.measurements.split(';')) || [];
-const fields = (flags.fields && flags.fields.split(';')) || [];
-if (measurements.length !== fields.length && fields.length > 0) {
-  console.error(
-    '  ERROR: Measurement and field lists need to be equal size or fields should be empty',
-  );
-  console.log(cli.help);
-  process.exit(1);
-}
+const { useTargetMeasurements } = flags;
 
 if (!flags.db) {
   console.error(
@@ -216,7 +202,7 @@ const validateGroups = (groups: Groups) => {
 };
 const config: HostPortConfig = { isCombined: false, restore: false };
 
-const executeCommand = (command: string) =>
+const executeCommand = (command: string, format: string) =>
   execa('influx', [
     ...createHostPort(config),
     ...createConfigFromFlags([
@@ -226,9 +212,25 @@ const executeCommand = (command: string) =>
       'unsafeSsl',
       'pps',
     ]),
+    `-format=${format || 'column'}`,
     '-execute',
     command,
   ]);
+
+const parseResults = res =>
+  res.results.reduce((acc, i) => {
+    i.series.forEach(k => {
+      acc[k.name] = k.values.map(([key, value]) => ({ key, value }));
+    });
+    return acc;
+  }, {});
+
+const parseTags = (tags: string[]): string[] =>
+  tags.map(item => `${item.key}::tag`);
+const parseFields = (fields: string[], tags: string[]): string[] =>
+  fields
+    .filter(field => !tags.find(tag => tag.key === field.key))
+    .map(field => `${field.key}::${field.value}`);
 
 const runMergeScript = async (
   groups: Groups,
@@ -240,57 +242,70 @@ const runMergeScript = async (
 
   await executeCommand(`CREATE DATABASE ${flags.newdb || flags.db}`);
 
-  return Promise.all(
-    keys.map(key => {
-      const tempDatabase = `${flags.db}_${key}`;
-      const targetDatabase = `${flags.newdb || flags.db}`;
+  const targetDatabase = `${flags.newdb || flags.db}`;
+  const measurementsFields = useTargetMeasurements
+    ? [
+        executeCommand(`SHOW field keys ON ${targetDatabase}`, 'json'),
+        executeCommand(`SHOW tag keys ON ${targetDatabase}`, 'json'),
+      ]
+    : [Promise.resolve('*')];
 
-      const measurements =
-        (flags.measurements && flags.measurements.split(';')) || [];
-      const fields = (flags.fields && flags.fields.split(';')) || [];
-      if (measurements.length !== fields.length && fields.length > 0) {
-        throw new Error(
-          'measurement and field list need to be equal size or fields should be empty',
-        );
-      }
-      if (!measurements.length) {
-        measurements.push(null);
-        fields.push(null);
-      }
+  return Promise.all(measurementsFields).then(([fields, tags]) => {
+    const measurements: string[] = useTargetMeasurements
+      ? parseResults(JSON.parse(fields.stdout))
+      : { '*': [] };
+    const tagKeys: string[] = useTargetMeasurements
+      ? parseResults(JSON.parse(tags.stdout))
+      : { '*': [] };
 
-      return Promise.all(
-        measurements.map((measurement, i) => {
-          const run = async () => {
-            await executeCommand(
-              `SELECT ${fields[i]} INTO ${targetDatabase}..${measurement ||
-                `:MEASUREMENT`} FROM  ${tempDatabase}..${measurement ||
-                `/.*/`} GROUP BY *`,
-            );
-
-            console.info(
-              `  INFO: Merged ${measurement ||
-                `*`} ON ${tempDatabase} to ${targetDatabase}!`,
-            );
-            return Promise.resolve();
-          };
-          return limit(() =>
-            pRetry(run, {
-              onFailedAttempt: error => {
+    return Promise.all(
+      keys.map(key => {
+        const tempDatabase = `${flags.db}_${key}`;
+        return Promise.all(
+          Object.entries(measurements).map(([measurement, values]) => {
+            const run = async () => {
+              if (useTargetMeasurements) {
+                const tag = parseTags(tagKeys[measurement]);
+                const fieldKeys = parseFields(values, tagKeys[measurement]);
                 console.log(
-                  `Attempt ${
-                    error.attemptNumber
-                  } for ${tempDatabase} to ${targetDatabase} failed. There are ${
-                    error.attemptsLeft
-                  } attempts left.`,
+                  `Using target measurements:  ${tag.concat()},${fieldKeys.concat()}`,
                 );
-              },
-              retries: 5,
-            }),
-          );
-        }),
-      ).then(() => executeCommand(`DROP DATABASE ${tempDatabase}`));
-    }),
-  );
+                await executeCommand(
+                  `SELECT ${tag.concat()},${fieldKeys.concat()} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
+                );
+              } else {
+                console.log('Using wild card for copying measurements');
+                await executeCommand(
+                  `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM  ${tempDatabase}../.*/ GROUP BY *`,
+                );
+              }
+
+              console.info(
+                `  INFO: Merged ${measurement ||
+                  `*`} ON ${tempDatabase} to ${targetDatabase}!`,
+              );
+              return Promise.resolve();
+            };
+            return limit(() =>
+              pRetry(run, {
+                onFailedAttempt: error => {
+                  console.log(
+                    `Attempt ${
+                      error.attemptNumber
+                    } for ${tempDatabase} to ${targetDatabase} failed. There are ${
+                      error.attemptsLeft
+                    } attempts left.`,
+                    `Consider using -useTargetMeasurements flag`,
+                  );
+                },
+                retries: 5,
+              }),
+            );
+          }),
+        ).then(() => executeCommand(`DROP DATABASE ${tempDatabase}`));
+      }),
+    );
+  });
 };
 
 const restoreGroups = async (groups: Groups): Promise<void> => {
