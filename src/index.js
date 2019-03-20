@@ -304,8 +304,12 @@ const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
                       error.attemptNumber
                     } for ${tempDatabase} to ${targetDatabase} failed. There are ${
                       error.attemptsLeft
-                    } attempts left.`,
-                    `Consider using -useTargetMeasurements flag`,
+                    } attempts left.\n`,
+                    `${
+                      error.stderr && error.stderr.indexOf('type conflict') >= 0
+                        ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
+                        : ``
+                    }`,
                   );
                 },
                 retries: 5,
