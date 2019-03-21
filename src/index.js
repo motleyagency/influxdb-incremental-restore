@@ -306,7 +306,7 @@ const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
                       error.attemptsLeft
                     } attempts left.\n`,
                     `${
-                      error.stderr && error.stderr.indexOf('type conflict') >= 0
+                      error.stderr && error.stderr.includes('type conflict')
                         ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
                         : ``
                     }`,
