@@ -56,36 +56,32 @@ yarn global add @motleyagency/influxdb-incremental-restore
 CLI for incrementally restoring incremental InfluxDB backups
 
 Usage
-  $ influxdb-incremental-restore -db <db_name> <options> <path-to-backups>
+$ influxdb-incremental-restore <options> <path-to-backups>
 
 Options
-
-[ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
-[ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for restore/backup connections. Example: -port 8088
-[ -portHttp <port> ]: Host and port for InfluxDB OSS instance. Default value is '8086'. Required for Api connections. Example: -portHttp 8086
-[ -db <db_name>]: Name of the database to be restored from the backup. Required.
-[ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
-[ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
-[ -newrp <newrp_name> ]: Name of the retention policy to be created on the target system. Requires that -rp is set. If not specified, then the -rp value is used.
-[ -shard <shard_ID> ]: Shard ID of the shard to be restored. If specified, then -db and -rp are required.
-[ -password <password> ]: Password to connect to the server.
-[ -username <username> ]: Username to connect to the server.
-[ -ssl ]: Use https for requests.
-[ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
-[ -pps ] How many points per second the import will allow.  By default it is zero and will not throttle importing.
-[ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
-[ -measurements <meas1;meas2> ]: measurement list (separated by semicolon)
-[ -fields <'field1::type,field2::type;field1::type,field2::type'> ]: field lists, same amount as measurements or empty (separated by comma and semicolon)
-
-General commands:
-[ --version ]: Display version and exit
-[ --help ]: Display this help
+  [ -host <host> ]: Host and port for InfluxDB OSS instance. Default value is '127.0.0.1'. Required for remote connections. Example: -host 127.0.0.1
+  [ -port <port> ]: Host and port for InfluxDB OSS instance. Default value is '8088'. Required for restore/backup connections. Example: -port 8088
+  [ -portHttp <port> ]: Host and port for InfluxDB OSS instance. Default value is '8086'. Required for Api connections. Example: -port 8086
+  [ -db <db_name>]: Name of the database to be restored from the backup. Required.
+  [ -newdb <newdb_name> ]: Name of the database into which the archived data will be imported on the target system. If not specified, then the value for -db is used. The new database name must be unique to the target system.
+  [ -rp <rp_name> ]: Name of the retention policy from the backup that will be restored. Requires that -db is set. If not specified, all retention policies will be used.
+  [ -newrp <newrp_name> ]: Name of the retention policy to be created on the target system. Requires that -rp is set. If not specified, then the -rp value is used.
+  [ -shard <shard_ID> ]: Shard ID of the shard to be restored. If specified, then -db and -rp are required.
+  [ -password <password> ]: Password to connect to the server.
+  [ -username <username> ]: Username to connect to the server.
+  [ -ssl ]: Use https for requests.
+  [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
+  [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
+[ -useTargetMeasurements] Use measurements from target database, use if you get errors like '... input field "<field>" on measurement "<measurement>" is type float, already exists as type integer... '
+  [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
+  [ --version ]: Display version and exit
+  [ --help ]: Display this help
 
 Examples
+  $ influxdb-incremental-restore -db old-database ./backups
   $ influxdb-incremental-restore -db old-database ./backups # restores old-database
   $ influxdb-incremental-restore -db old-database -newdb new-database # restores old-database as new-database
-  $ influxdb-incremental-restore -db old-database -measurements outdoor_temperatures;indoor_temperatures
-  $ influxdb-incremental-restore -db old-database -measurements 'temperature::float;temperature::integer,humidity::integer'
+  $ influxdb-incremental-restore -db old-database -useTargetMeasurements
   $ influxdb-incremental-restore --version
   $ influxdb-incremental-restore --help
 ```
@@ -94,6 +90,7 @@ Examples
 
 ### Versions
 
+* `0.0.7`: Added flag `useTargetMeasurements` (#12, @mgronbar)
 * `0.0.6`: You can now pick which measurements and fields you want to restore (#11, @mgronbar)
 * `0.0.5`: Increased logging for better UX
 * `0.0.4`: Fix `portHttp` flag, few typo fixes
