@@ -33,7 +33,7 @@ const cli = meow(
     [ -ssl ]: Use https for requests.
     [ -unsafeSsl ]: Set this when connecting to the cluster using https and not use SSL verification.
     [ -pps ] How many points per second the import will allow. By default it is zero and will not throttle importing.
-    [ -useTargetMeasurements] Use measrements from target database, use if you get error like '... input field "<field>" on measurement "<measurement>" is type float, already exists as type integer... '
+[ -useTargetMeasurements] Use measurements from target database, use if you get errors like '... input field "<field>" on measurement "<measurement>" is type float, already exists as type integer... '
     [ -concurrency <number> ]: Amount of concurrent requests to the database. Default is 1.
     [ --version ]: Display version and exit
     [ --help ]: Display this help
@@ -263,7 +263,7 @@ const runMergeScript = async groups => {
                       error.attemptsLeft
                     } attempts left.\n`,
                     `${
-                      error.stderr && error.stderr.indexOf('type conflict') >= 0
+                      error.stderr && error.stderr.includes('type conflict')
                         ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
                         : ``
                     }`,
