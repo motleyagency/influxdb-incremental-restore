@@ -13,7 +13,7 @@ import tmp from 'tmp-promise';
 import meow from 'meow';
 import execa from 'execa';
 import pLimit from 'p-limit';
-import pRetry from 'p-retry';
+import pRetry, { FailedAttemptError } from 'p-retry';
 
 const { copy, ensureDir } = fsExtra;
 
@@ -59,6 +59,14 @@ type Result = { series: { name: string; values: [string, string][] }[] };
 
 interface ParsedResult {
   [key: string]: FieldArray;
+}
+
+interface CommandFailedAttemptError extends FailedAttemptError {
+  attemptNumber: number;
+  retriesLeft: number;
+  stdout?: string;
+  stderr?: string;
+  shortMessage?: string;
 }
 
 const cli = meow(
@@ -243,6 +251,9 @@ const parseResults = (res: {
   results: Result[];
 }): { [key: string]: FieldArray } =>
   res.results.reduce((acc, i) => {
+    if (!i.series) {
+      return acc;
+    }
     i.series.forEach(k => {
       acc[k.name] = k.values.map(([key, value]) => ({ key, value }));
     });
@@ -303,12 +314,12 @@ const runMergeScript = async (groups: Groups): Promise<(string | void)[]> => {
                 await executeCommand(
                   `SELECT ${tag.join(',')},${fieldKeys.join(
                     ',',
-                  )} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
+                  )} INTO ${targetDatabase}..${measurement} FROM ${tempDatabase}..${measurement} GROUP BY *`,
                 );
               } else {
                 console.log('Using wild card for copying measurements');
                 await executeCommand(
-                  `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM  ${tempDatabase}../.*/ GROUP BY *`,
+                  `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM ${tempDatabase}../.*/ GROUP BY *`,
                 );
               }
 
@@ -320,15 +331,20 @@ const runMergeScript = async (groups: Groups): Promise<(string | void)[]> => {
             };
             return limit(() =>
               pRetry(run, {
-                onFailedAttempt: error => {
+                onFailedAttempt: (error: CommandFailedAttemptError) => {
                   console.log(
                     `Attempt ${error.attemptNumber} for ${tempDatabase} to ${targetDatabase} failed. There are ${error.retriesLeft} attempts left.\n`,
-                    `${
-                      error && error.message.includes('type conflict')
-                        ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
-                        : ``
-                    }`,
                   );
+
+                  console.log(error.shortMessage);
+                  console.log('stdout:', error.stdout);
+                  console.error('stderr:', error.stderr);
+
+                  if (error?.stderr?.includes('type conflict')) {
+                    console.log(
+                      `Type conflict: Consider using -useTargetMeasurements flag`,
+                    );
+                  }
                 },
                 retries: 5,
               }),
@@ -416,7 +432,7 @@ const restoreGroups = async (
     );
     const groups: Groups = groupBy(names, i => i.split('.')[0]);
 
-    if (!groups[0] || groups[0].length === 0) {
+    if (Object.keys(groups).length === 0) {
       console.info('  INFO:  Nothing to restore, exiting...');
       process.exit(0);
     }

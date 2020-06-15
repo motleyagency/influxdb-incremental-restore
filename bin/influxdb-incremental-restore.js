@@ -708,7 +708,7 @@ var restoreGroups = function(groups) {
           groups = lodash_groupby_1.default(names, function(i) {
             return i.split('.')[0];
           });
-          if (!groups[0] || groups[0].length === 0) {
+          if (Object.keys(groups).length === 0) {
             console.info('  INFO:  Nothing to restore, exiting...');
             process.exit(0);
           }
