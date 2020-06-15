@@ -9,12 +9,12 @@ incremental backups in InfluxDB (1.5.x). This script does just that for InfluxDB
 
 ### Prerequisites
 
-* [NodeJS](https://nodejs.org/en/) > 8.9.0
-* `influx` CLI tool (comes with InfluxDB)
-* `influxd` CLI tool
-* InfluxDB `-portable` backups (`meta`, `manifest` and `sX.tar.gz` (shards/data)) in a single level deep folder
-* A running InfluxDB installation that does not contain a database with the given name.
-* (OPTIONAL) Disable [`query timeout`](https://docs.influxdata.com/influxdb/v1.6/troubleshooting/query_management/#query-timeout)s if any.
+- [NodeJS](https://nodejs.org/en/) > 8.9.0
+- `influx` CLI tool (comes with InfluxDB)
+- `influxd` CLI tool
+- InfluxDB `-portable` backups (`meta`, `manifest` and `sX.tar.gz` (shards/data)) in a single level deep folder
+- A running InfluxDB installation that does not contain a database with the given name.
+- (OPTIONAL) Disable [`query timeout`](https://docs.influxdata.com/influxdb/v1.6/troubleshooting/query_management/#query-timeout)s if any.
 
 #### Folder structure
 
@@ -90,13 +90,14 @@ Examples
 
 ### Versions
 
-* `0.0.7`: Added flag `useTargetMeasurements` (#12, @mgronbar)
-* `0.0.6`: You can now pick which measurements and fields you want to restore (#11, @mgronbar)
-* `0.0.5`: Increased logging for better UX
-* `0.0.4`: Fix `portHttp` flag, few typo fixes
-* `0.0.3`: Separate API and RPC port configurations
-* `0.0.2`: Fix bin/-link.
-* `0.0.1`: Initial release catered for our needs. Seems to work but YMMV.
+- `1.0.0`: TypeScript conversion from Flow, dependency version upgrades, possible small fixes caught by the type compiler..
+- `0.0.7`: Added flag `useTargetMeasurements` (#12, @mgronbar)
+- `0.0.6`: You can now pick which measurements and fields you want to restore (#11, @mgronbar)
+- `0.0.5`: Increased logging for better UX
+- `0.0.4`: Fix `portHttp` flag, few typo fixes
+- `0.0.3`: Separate API and RPC port configurations
+- `0.0.2`: Fix bin/-link.
+- `0.0.1`: Initial release catered for our needs. Seems to work but YMMV.
 
 ### Contributions
 
