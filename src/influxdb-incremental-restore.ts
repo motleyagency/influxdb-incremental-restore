@@ -51,6 +51,16 @@ type InfluxDataResult = {
   failed?: boolean;
 };
 
+type Tag = { key: string; value: string };
+
+type FieldArray = Tag[];
+
+type Result = { series: { name: string; values: [string, string][] }[] };
+
+interface ParsedResult {
+  [key: string]: FieldArray;
+}
+
 const cli = meow(
   `
   Usage
@@ -84,51 +94,53 @@ const cli = meow(
     $ influxdb-incremental-restore --help
 `,
   {
-    host: {
-      type: 'string',
-    },
-    port: {
-      type: 'string',
-    },
-    portHttp: {
-      type: 'string',
-    },
-    db: {
-      type: 'string',
-      alias: 'database',
-    },
-    newdb: {
-      type: 'string',
-    },
-    rp: {
-      type: 'string',
-    },
-    newrp: {
-      type: 'string',
-    },
-    shard: {
-      type: 'string',
-    },
-    password: {
-      type: 'string',
-    },
-    username: {
-      type: 'string',
-    },
-    ssl: {
-      type: 'boolean',
-    },
-    unsafeSsl: {
-      type: 'boolean',
-    },
-    pps: {
-      type: 'string',
-    },
-    concurrency: {
-      type: 'string',
-    },
-    useTargetMeasurements: {
-      type: 'boolean',
+    flags: {
+      host: {
+        type: 'string',
+      },
+      port: {
+        type: 'string',
+      },
+      portHttp: {
+        type: 'string',
+      },
+      db: {
+        type: 'string',
+        alias: 'database',
+      },
+      newdb: {
+        type: 'string',
+      },
+      rp: {
+        type: 'string',
+      },
+      newrp: {
+        type: 'string',
+      },
+      shard: {
+        type: 'string',
+      },
+      password: {
+        type: 'string',
+      },
+      username: {
+        type: 'string',
+      },
+      ssl: {
+        type: 'boolean',
+      },
+      unsafeSsl: {
+        type: 'boolean',
+      },
+      pps: {
+        type: 'string',
+      },
+      concurrency: {
+        type: 'string',
+      },
+      useTargetMeasurements: {
+        type: 'boolean',
+      },
     },
     description: 'CLI for incrementally restoring incremental InfluxDB backups',
     argv: process.argv
@@ -227,19 +239,20 @@ const executeCommand = async (
   return stdout;
 };
 
-type FieldArray = { key: string; value: string }[];
-
-const parseResults = (res): { [key: string]: FieldArray } =>
+const parseResults = (res: {
+  results: Result[];
+}): { [key: string]: FieldArray } =>
   res.results.reduce((acc, i) => {
     i.series.forEach(k => {
       acc[k.name] = k.values.map(([key, value]) => ({ key, value }));
     });
     return acc;
-  }, {});
+  }, {} as ParsedResult);
 
-const parseTags = (tags): string[] => tags.map(item => `${item.key}::tag`);
+const parseTags = (tags: FieldArray): string[] =>
+  tags.map(item => `${item.key}::tag`);
 
-const parseFields = (fields: FieldArray, tags): string[] =>
+const parseFields = (fields: FieldArray, tags: FieldArray): string[] =>
   fields
     .filter(field => !tags.find(tag => tag.key === field.key))
     .map(field => `${field.key}::${field.value}`);
@@ -277,10 +290,7 @@ const runMergeScript = async (groups: Groups): Promise<(string | void)[]> => {
       const tempDatabase = `${flags.db}_${key}`;
       return Promise.all(
         Object.entries(measurements).map(
-          ([measurement, values]: [
-            string,
-            { key: string; value: string }[],
-          ]) => {
+          ([measurement, values]: [string, FieldArray]) => {
             const run = async (): Promise<void> => {
               if (useTargetMeasurements) {
                 const tag = parseTags(tagKeys[measurement]);
@@ -312,9 +322,9 @@ const runMergeScript = async (groups: Groups): Promise<(string | void)[]> => {
               pRetry(run, {
                 onFailedAttempt: error => {
                   console.log(
-                    `Attempt ${error.attemptNumber} for ${tempDatabase} to ${targetDatabase} failed. There are ${error.attemptsLeft} attempts left.\n`,
+                    `Attempt ${error.attemptNumber} for ${tempDatabase} to ${targetDatabase} failed. There are ${error.retriesLeft} attempts left.\n`,
                     `${
-                      error.stderr && error.stderr.includes('type conflict')
+                      error && error.message.includes('type conflict')
                         ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
                         : ``
                     }`,
@@ -400,7 +410,7 @@ const restoreGroups = async (
   try {
     const names: string[] = ((await readdir(dumpFolder)) || []).filter(
       (i: string): boolean => {
-        const ext: string = i.split('.').pop();
+        const ext = i.split('.').pop();
         return ['manifest', 'meta', 'gz'].some(x => x === ext);
       },
     );

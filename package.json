@@ -10,8 +10,8 @@
     "lib": "lib"
   },
   "scripts": {
-    "build": "tsc src/index.ts",
-    "dev": "ts-node-dev src/index.ts",
+    "build": "tsc",
+    "dev": "ts-node-dev src/influxdb-incremental-restore.ts",
     "prepublish": "yarn run build",
     "test": "jest"
   },
@@ -40,9 +40,9 @@
     "lodash.groupby": "^4.6.0",
     "lodash.pick": "^4.4.0",
     "meow": "^5.0.0",
-    "p-limit": "^1.2.0",
+    "p-limit": "^3.0.1",
     "p-queue": "^2.3.0",
-    "p-retry": "^2.0.0",
+    "p-retry": "^4.2.0",
     "parcel": "^1.8.1",
     "tmp-promise": "^3.0.2"
   },
@@ -53,8 +53,6 @@
     "@types/lodash.pick": "^4.4.6",
     "@types/meow": "^5.0.0",
     "@types/node": "^14.0.13",
-    "@types/p-limit": "^2.2.0",
-    "@types/p-retry": "^3.0.1",
     "@typescript-eslint/eslint-plugin": "^2.11.0",
     "@typescript-eslint/parser": "^2.11.0",
     "eslint": "^6.7.2",
