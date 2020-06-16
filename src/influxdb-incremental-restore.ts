@@ -387,7 +387,7 @@ const restoreGroups = async (
               'column',
             );
 
-            if (!data) {
+            if (data) {
               console.log(`Skipping ${flags.db}_${key} as it already exists`);
               shouldRun = false;
             }
@@ -448,7 +448,7 @@ const restoreGroups = async (
       } incremental backups successfully`,
     );
   } catch (err) {
-    console.error(`ERROR: ${err.message}}`, err);
+    console.error(err);
     process.exit(1);
   }
 })();
