@@ -333,6 +333,9 @@ var executeCommand = function(command, format) {
 };
 var parseResults = function(res) {
   return res.results.reduce(function(acc, i) {
+    if (!i.series) {
+      return acc;
+    }
     i.series.forEach(function(k) {
       acc[k.name] = k.values.map(function(_a) {
         var key = _a[0],
@@ -449,7 +452,7 @@ var runMergeScript = function(groups) {
                                     targetDatabase +
                                     '..' +
                                     measurement +
-                                    ' FROM  ' +
+                                    ' FROM ' +
                                     tempDatabase +
                                     '..' +
                                     measurement +
@@ -468,7 +471,7 @@ var runMergeScript = function(groups) {
                                 executeCommand(
                                   'SELECT * INTO ' +
                                     targetDatabase +
-                                    '..:MEASUREMENT FROM  ' +
+                                    '..:MEASUREMENT FROM ' +
                                     tempDatabase +
                                     '../.*/ GROUP BY *',
                                 ),
@@ -494,6 +497,7 @@ var runMergeScript = function(groups) {
                     return limit(function() {
                       return p_retry_1.default(run, {
                         onFailedAttempt: function(error) {
+                          var _a;
                           console.log(
                             'Attempt ' +
                               error.attemptNumber +
@@ -504,11 +508,22 @@ var runMergeScript = function(groups) {
                               ' failed. There are ' +
                               error.retriesLeft +
                               ' attempts left.\n',
-                            '' +
-                              (error && error.message.includes('type conflict')
-                                ? '\nType conflict: Consider using -useTargetMeasurements flag\n\n'
-                                : ''),
                           );
+                          console.log(error.shortMessage);
+                          console.log('stdout:', error.stdout);
+                          console.error('stderr:', error.stderr);
+                          if (
+                            (_a =
+                              error === null || error === void 0
+                                ? void 0
+                                : error.stderr) === null || _a === void 0
+                              ? void 0
+                              : _a.includes('type conflict')
+                          ) {
+                            console.log(
+                              'Type conflict: Consider using -useTargetMeasurements flag',
+                            );
+                          }
                         },
                         retries: 5,
                       });
@@ -607,7 +622,7 @@ var restoreGroups = function(groups) {
                                       ];
                                     case 2:
                                       data = _a.sent();
-                                      if (!data) {
+                                      if (data) {
                                         console.log(
                                           'Skipping ' +
                                             flags.db +
@@ -728,7 +743,7 @@ var restoreGroups = function(groups) {
           return [3 /*break*/, 5];
         case 4:
           err_3 = _a.sent();
-          console.error('ERROR: ' + err_3.message + '}', err_3);
+          console.error(err_3);
           process.exit(1);
           return [3 /*break*/, 5];
         case 5:

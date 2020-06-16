@@ -23,24 +23,6 @@ type Groups = {
   [key: string]: string[];
 };
 
-type Flags = {
-  host?: string;
-  port?: string;
-  portHttp?: string;
-  db: string;
-  newdb?: string;
-  rp?: string;
-  newrp?: string;
-  shard?: string;
-  password?: string;
-  username?: string;
-  ssl?: string;
-  unsafeSsl: string;
-  pps?: string;
-  concurrency?: string;
-  useTargetMeasurements?: boolean;
-};
-
 type HostPortConfig = {
   isCombined: boolean;
   restore: boolean;
