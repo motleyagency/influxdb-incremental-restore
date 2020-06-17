@@ -1,57 +1,57 @@
 #!/usr/bin/env node
-// @flow
+
 /* eslint-disable no-console */
-const path = require('path');
-const fs = require('fs');
-const { copy, ensureDir } = require('fs-extra');
-const { promisify } = require('util');
-const { flatten, groupBy, pick } = require('lodash');
-const tmp = require('tmp-promise');
-const meow = require('meow');
-const execa = require('execa');
-const pLimit = require('p-limit');
-const pRetry = require('p-retry');
+
+import path from 'path';
+import fs from 'fs';
+import fsExtra from 'fs-extra';
+import { promisify } from 'util';
+import flatten from 'lodash.flatten';
+import pick from 'lodash.pick';
+import groupBy from 'lodash.groupby';
+import tmp from 'tmp-promise';
+import meow from 'meow';
+import execa from 'execa';
+import pLimit from 'p-limit';
+import pRetry, { FailedAttemptError } from 'p-retry';
+
+const { copy, ensureDir } = fsExtra;
 
 const readdir = promisify(fs.readdir);
 
 type Groups = {
-  [string]: Array<string>,
-};
-
-type Flags = {
-  host?: string,
-  port?: string,
-  portHttp?: string,
-  db: string,
-  newdb?: string,
-  rp?: string,
-  newrp?: string,
-  shard?: string,
-  password?: string,
-  username?: string,
-  ssl?: string,
-  unsafeSsl: string,
-  pps?: string,
-  concurrency?: string,
-  useTargetMeasurements?: boolean,
-};
-
-type Cli = {
-  flags: Flags,
-  input: [string],
-  help: string,
+  [key: string]: string[];
 };
 
 type HostPortConfig = {
-  isCombined: boolean,
-  restore: boolean,
+  isCombined: boolean;
+  restore: boolean;
 };
 
 type InfluxDataResult = {
-  stdout: string,
+  stdout: string;
+  failed?: boolean;
 };
 
-const cli: Cli = meow(
+type Tag = { key: string; value: string };
+
+type FieldArray = Tag[];
+
+type Result = { series: { name: string; values: [string, string][] }[] };
+
+interface ParsedResult {
+  [key: string]: FieldArray;
+}
+
+interface CommandFailedAttemptError extends FailedAttemptError {
+  attemptNumber: number;
+  retriesLeft: number;
+  stdout?: string;
+  stderr?: string;
+  shortMessage?: string;
+}
+
+const cli = meow(
   `
   Usage
   $ influxdb-incremental-restore <options> <path-to-backups>
@@ -84,51 +84,53 @@ const cli: Cli = meow(
     $ influxdb-incremental-restore --help
 `,
   {
-    host: {
-      type: 'string',
-    },
-    port: {
-      type: 'string',
-    },
-    portHttp: {
-      type: 'string',
-    },
-    db: {
-      type: 'string',
-      alias: 'database',
-    },
-    newdb: {
-      type: 'string',
-    },
-    rp: {
-      type: 'string',
-    },
-    newrp: {
-      type: 'string',
-    },
-    shard: {
-      type: 'string',
-    },
-    password: {
-      type: 'string',
-    },
-    username: {
-      type: 'string',
-    },
-    ssl: {
-      type: 'boolean',
-    },
-    unsafeSsl: {
-      type: 'boolean',
-    },
-    pps: {
-      type: 'string',
-    },
-    concurrency: {
-      type: 'string',
-    },
-    useTargetMeasurements: {
-      type: 'boolean',
+    flags: {
+      host: {
+        type: 'string',
+      },
+      port: {
+        type: 'string',
+      },
+      portHttp: {
+        type: 'string',
+      },
+      db: {
+        type: 'string',
+        alias: 'database',
+      },
+      newdb: {
+        type: 'string',
+      },
+      rp: {
+        type: 'string',
+      },
+      newrp: {
+        type: 'string',
+      },
+      shard: {
+        type: 'string',
+      },
+      password: {
+        type: 'string',
+      },
+      username: {
+        type: 'string',
+      },
+      ssl: {
+        type: 'boolean',
+      },
+      unsafeSsl: {
+        type: 'boolean',
+      },
+      pps: {
+        type: 'string',
+      },
+      concurrency: {
+        type: 'string',
+      },
+      useTargetMeasurements: {
+        type: 'boolean',
+      },
     },
     description: 'CLI for incrementally restoring incremental InfluxDB backups',
     argv: process.argv
@@ -184,10 +186,9 @@ const createConfigFromFlags = (values: string[]): string[] =>
     ),
   );
 
-const validateGroups = (groups: Groups) => {
+const validateGroups = (groups: Groups): void => {
   Object.entries(groups).forEach(([key, entry]) => {
-    // $FlowFixMe
-    const extensions: string[] = (entry: string[]).map(i => i.split('.').pop());
+    const extensions = entry.map(i => i.split('.').pop());
     const hasManifest: string | void = extensions.find(i => i === 'manifest');
     const hasMeta = extensions.find(i => i === 'meta');
     const hasShards = extensions.find(i => i === 'gz');
@@ -207,11 +208,11 @@ const validateGroups = (groups: Groups) => {
 };
 const config: HostPortConfig = { isCombined: false, restore: false };
 
-const executeCommand = (
+const executeCommand = async (
   command: string,
-  format: string = 'column',
-): Promise<InfluxDataResult> =>
-  execa('influx', [
+  format = 'column',
+): Promise<string> => {
+  const { stdout } = await execa('influx', [
     ...createHostPort(config),
     ...createConfigFromFlags([
       'password',
@@ -225,51 +226,65 @@ const executeCommand = (
     command,
   ]);
 
-const parseResults = res =>
+  return stdout;
+};
+
+const parseResults = (res: {
+  results: Result[];
+}): { [key: string]: FieldArray } =>
   res.results.reduce((acc, i) => {
+    if (!i.series) {
+      return acc;
+    }
     i.series.forEach(k => {
       acc[k.name] = k.values.map(([key, value]) => ({ key, value }));
     });
     return acc;
-  }, {});
+  }, {} as ParsedResult);
 
-const parseTags = (tags): Array<string> => tags.map(item => `${item.key}::tag`);
+const parseTags = (tags: FieldArray): string[] =>
+  tags.map(item => `${item.key}::tag`);
 
-const parseFields = (fields: Array<Object>, tags): string[] =>
+const parseFields = (fields: FieldArray, tags: FieldArray): string[] =>
   fields
     .filter(field => !tags.find(tag => tag.key === field.key))
     .map(field => `${field.key}::${field.value}`);
 
-const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
-  // $FlowFixMe
+const runMergeScript = async (groups: Groups): Promise<(string | void)[]> => {
   const limit = pLimit(CONCURRENCY);
 
   const keys = Object.keys(groups);
 
   await executeCommand(`CREATE DATABASE ${flags.newdb || flags.db}`);
-  const defaultResult: InfluxDataResult = { stdout: '*' };
+
   const targetDatabase = `${flags.newdb || flags.db}`;
-  const measurementsFields = useTargetMeasurements
-    ? [
-        executeCommand(`SHOW field keys ON ${targetDatabase}`, 'json'),
-        executeCommand(`SHOW tag keys ON ${targetDatabase}`, 'json'),
-      ]
-    : [Promise.resolve(defaultResult)];
 
-  return Promise.all(measurementsFields).then(([fields, tags]) => {
-    const measurements = useTargetMeasurements
-      ? parseResults(JSON.parse(fields.stdout))
-      : { '*': [] };
-    const tagKeys = useTargetMeasurements
-      ? parseResults(JSON.parse(tags.stdout))
-      : { '*': [] };
+  const measurements = useTargetMeasurements
+    ? parseResults(
+        JSON.parse(
+          (await executeCommand(
+            `SHOW field keys ON ${targetDatabase}`,
+            'json',
+          )) as string,
+        ),
+      )
+    : { '*': [] };
+  const tagKeys = parseResults(
+    JSON.parse(
+      (await executeCommand(
+        `SHOW tag keys ON ${targetDatabase}`,
+        'json',
+      )) as string,
+    ),
+  ) || { '*': [] };
 
-    return Promise.all(
-      keys.map(key => {
-        const tempDatabase = `${flags.db}_${key}`;
-        return Promise.all(
-          Object.entries(measurements).map(([measurement, values]) => {
-            const run = async () => {
+  return Promise.all(
+    keys.map(key => {
+      const tempDatabase = `${flags.db}_${key}`;
+      return Promise.all(
+        Object.entries(measurements).map(
+          ([measurement, values]: [string, FieldArray]) => {
+            const run = async (): Promise<void> => {
               if (useTargetMeasurements) {
                 const tag = parseTags(tagKeys[measurement]);
                 const fieldKeys = parseFields(values, tagKeys[measurement]);
@@ -281,12 +296,12 @@ const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
                 await executeCommand(
                   `SELECT ${tag.join(',')},${fieldKeys.join(
                     ',',
-                  )} INTO ${targetDatabase}..${measurement} FROM  ${tempDatabase}..${measurement} GROUP BY *`,
+                  )} INTO ${targetDatabase}..${measurement} FROM ${tempDatabase}..${measurement} GROUP BY *`,
                 );
               } else {
                 console.log('Using wild card for copying measurements');
                 await executeCommand(
-                  `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM  ${tempDatabase}../.*/ GROUP BY *`,
+                  `SELECT * INTO ${targetDatabase}..:MEASUREMENT FROM ${tempDatabase}../.*/ GROUP BY *`,
                 );
               }
 
@@ -298,31 +313,34 @@ const runMergeScript = async (groups: Groups): Promise<InfluxDataResult[]> => {
             };
             return limit(() =>
               pRetry(run, {
-                onFailedAttempt: error => {
+                onFailedAttempt: (error: CommandFailedAttemptError) => {
                   console.log(
-                    `Attempt ${
-                      error.attemptNumber
-                    } for ${tempDatabase} to ${targetDatabase} failed. There are ${
-                      error.attemptsLeft
-                    } attempts left.\n`,
-                    `${
-                      error.stderr && error.stderr.includes('type conflict')
-                        ? `\nType conflict: Consider using -useTargetMeasurements flag\n\n`
-                        : ``
-                    }`,
+                    `Attempt ${error.attemptNumber} for ${tempDatabase} to ${targetDatabase} failed. There are ${error.retriesLeft} attempts left.\n`,
                   );
+
+                  console.log(error.shortMessage);
+                  console.log('stdout:', error.stdout);
+                  console.error('stderr:', error.stderr);
+
+                  if (error?.stderr?.includes('type conflict')) {
+                    console.log(
+                      `Type conflict: Consider using -useTargetMeasurements flag`,
+                    );
+                  }
                 },
                 retries: 5,
               }),
             );
-          }),
-        ).then(() => executeCommand(`DROP DATABASE ${tempDatabase}`));
-      }),
-    );
-  });
+          },
+        ),
+      ).then(() => executeCommand(`DROP DATABASE ${tempDatabase}`));
+    }),
+  );
 };
 
-const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
+const restoreGroups = async (
+  groups: Groups,
+): Promise<InfluxDataResult | void> => {
   const tmpDir = await tmp.dir({ unsafeCleanup: true });
   const limit = pLimit(CONCURRENCY);
 
@@ -333,7 +351,6 @@ const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
         await ensureDir(tmpPath);
 
         await Promise.all(
-          // $FlowFixMe
           entry.map(i =>
             copy(
               path.resolve(process.cwd(), dumpFolder, i),
@@ -342,31 +359,42 @@ const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
           ),
         );
 
-        return limit(() => {
+        return limit(async () => {
           console.info(`  INFO: Restoring ${flags.db}_${key}...`);
-          return executeCommand(
-            `SHOW MEASUREMENTS ON ${flags.db}_${key}`,
-            'column',
-          ).then(({ stdout, failed }) => {
-            // no results found or failed
+          let shouldRun = true;
 
-            if (!stdout || failed) {
-              return execa('influxd', [
-                'restore',
-                '-portable',
-                ...createHostPort({ isCombined: true, restore: true }),
-                ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
-                '-newdb',
-                `${flags.db}_${key}`,
-                tmpPath,
-              ]).then(result => {
-                console.log(result.stdout);
-                console.log(result.stderr);
-                console.info(`  Restored ${flags.db}_${key}!`);
-              });
+          try {
+            const data = await executeCommand(
+              `SHOW MEASUREMENTS ON ${flags.db}_${key}`,
+              'column',
+            );
+
+            if (data) {
+              console.log(`Skipping ${flags.db}_${key} as it already exists`);
+              shouldRun = false;
             }
-            console.log(`Skipping ${flags.db}_${key} as it already exists`);
-          });
+          } catch (err) {
+            console.error('Failed to execute command');
+            shouldRun = false;
+          }
+
+          if (shouldRun) {
+            const result = await execa('influxd', [
+              'restore',
+              '-portable',
+              ...createHostPort({ isCombined: true, restore: true }),
+              ...createConfigFromFlags(['db', 'rp', 'newrp', 'shard']),
+              '-newdb',
+              `${flags.db}_${key}`,
+              tmpPath,
+            ]);
+
+            console.log(result.stdout);
+            console.log(result.stderr);
+            console.info(`  Restored ${flags.db}_${key}!`);
+          }
+
+          return Promise.resolve();
         });
       }),
     );
@@ -376,17 +404,17 @@ const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
   }
 };
 
-(async () => {
+(async (): Promise<void> => {
   try {
     const names: string[] = ((await readdir(dumpFolder)) || []).filter(
       (i: string): boolean => {
-        const ext: string = i.split('.').pop();
+        const ext = i.split('.').pop();
         return ['manifest', 'meta', 'gz'].some(x => x === ext);
       },
     );
     const groups: Groups = groupBy(names, i => i.split('.')[0]);
 
-    if (groups.length === 0) {
+    if (Object.keys(groups).length === 0) {
       console.info('  INFO:  Nothing to restore, exiting...');
       process.exit(0);
     }
@@ -402,7 +430,7 @@ const restoreGroups = async (groups: Groups): Promise<InfluxDataResult> => {
       } incremental backups successfully`,
     );
   } catch (err) {
-    console.error(`ERROR: ${err.message}}`, err);
+    console.error(err);
     process.exit(1);
   }
 })();
